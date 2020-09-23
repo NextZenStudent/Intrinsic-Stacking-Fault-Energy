@@ -1,0 +1,80 @@
+# --------------------- INITIALIZAITION ---------------------
+
+clear
+units		metal
+dimension	3
+boundary	p p s
+atom_style	atomic
+variable latparam1 equal 3.52
+
+
+variable x_displace equal -1*(${latparam1}/sqrt(6))
+
+
+variable xdim equal ${latparam1}*sqrt(6)/2*10
+variable ydim equal ${latparam1}*sqrt(2)/2*10
+variable zdim equal ${latparam1}*sqrt(3)*6
+
+
+# --------------------- CRYSTAL STRUCTURE DEFINITION ---------------------
+
+lattice		fcc ${latparam1}
+region		1 block 0 ${xdim} 0 ${ydim} 0 16.5 units box
+region 		2 block 0 ${xdim} 0 ${ydim} 16.5 36.5808 units box
+region		whole block 0 ${xdim} 0 ${ydim} 0 36.5808 units box
+
+
+create_box 	2 whole
+lattice fcc ${latparam1} orient x 1 1 2 orient y -1 1 0 orient z -1 -1 1
+create_atoms	1 region 1
+lattice fcc ${latparam1} orient x 1 1 2 orient y -1 1 0 orient z -1 -1 1
+create_atoms 	2 region 2 
+
+# --------------------- EAM POTENTIAL ---------------------
+
+pair_style	eam/alloy
+pair_coeff * * FeCuNi.eam.alloy Ni Ni
+
+# --------------------- SETTINGS ---------------------
+
+compute peratom all pe/atom
+compute eatoms all reduce sum c_peratom
+
+thermo 1
+thermo_style custom step pe c_eatoms
+
+dump 1 all custom 1 dump.relax.1.* id type xs ys zs c_peratom 
+run 0
+
+
+variable E equal "c_eatoms"
+variable Eo equal $E
+
+#variable E equal "c_eatoms" computes the initial energy of the model before any sliding is done
+#E is necessary to store the initial energy in Eo
+
+group bot region 1
+group top region 2
+displace_atoms top move ${x_displace} 0.0 0.0 units box
+
+#displace_atoms is the command neccessary to move atoms into the next stacking arrangement (ie: A -> B)
+
+fix 1 all setforce 0 0 NULL
+min_style cg
+minimize 1e-10 1e-10 1000 1000
+variable Ef equal "c_eatoms"
+variable Cf equal 1.60217657e-16
+variable A equal (${xdim}*${ydim})*1e-20
+variable SFE equal ((${Ef}-${Eo})*${Cf})/${A}
+
+#variable Ef equal "c_eatoms" computes the final energy of the system after sliding is done
+#variable A is the area of the Stacking fault plane
+#variable Cf is the conversion factor of electro volts to millijoules
+#variable SFE is the stacking-fault energy of the system
+####################################
+# SIMULATION DONE
+print "All done"
+print "Initial energy of atoms = ${Eo} eV"
+print "Final energy of atoms = ${Ef} eV"
+print "Stacking-fault energy = ${SFE} mJ/m^2"
+
